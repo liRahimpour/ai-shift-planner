@@ -71,6 +71,13 @@ app:
     access-token-ttl-minutes: ${JWT_ACCESS_TOKEN_TTL_MINUTES:30}
     refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:14}
   default-timezone: ${APP_DEFAULT_TIMEZONE:Europe/Berlin}
+  scheduling:
+    # Labour-law limits are configuration, never constants in the constraint code - see
+    # SchedulingProperties. Defaults below match German ArbZG; override per deployment.
+    minimum-rest-hours-between-shifts: ${SCHEDULING_MIN_REST_HOURS:11}
+    maximum-shift-hours-per-day: ${SCHEDULING_MAX_HOURS_PER_DAY:10}
+    maximum-consecutive-work-days: ${SCHEDULING_MAX_CONSECUTIVE_DAYS:6}
+    solver-seconds-spent-limit: ${SCHEDULING_SOLVER_SECONDS:30}
 
 logging:
   level:
