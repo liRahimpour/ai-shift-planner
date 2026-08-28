@@ -91,6 +91,34 @@ class HardConstraintTest {
                 .penalizesBy(1);
     }
 
+    @Test
+    void availabilityRunningToEndOfDayCoversAnOvernightShift() {
+        // The bar closes at 02:00, but availability is declared per calendar day. Someone
+        // available 17:00-23:59 on Saturday must be eligible for the Saturday 18:00-02:00
+        // shift. Comparing against LocalTime.MAX instead would fail this by a fraction of a
+        // second and quietly make every bar shift unstaffable.
+        var sarah = employee("Sarah")
+                .available(SATURDAY, AvailabilityType.AVAILABLE, "17:00", "23:59")
+                .build();
+        var bar = shift(SATURDAY, "18:00", "02:00", true, 1, 1);
+
+        verifier.verifyThat(ShiftScheduleConstraintProvider::employeeMustBeAvailable)
+                .given(slot(bar, 0, sarah))
+                .penalizesBy(0);
+    }
+
+    @Test
+    void availabilityEndingEarlyDoesNotCoverAnOvernightShift() {
+        var sarah = employee("Sarah")
+                .available(SATURDAY, AvailabilityType.AVAILABLE, "17:00", "21:00")
+                .build();
+        var bar = shift(SATURDAY, "18:00", "02:00", true, 1, 1);
+
+        verifier.verifyThat(ShiftScheduleConstraintProvider::employeeMustBeAvailable)
+                .given(slot(bar, 0, sarah))
+                .penalizesBy(1);
+    }
+
     // --- Overlaps ------------------------------------------------------------
 
     @Test

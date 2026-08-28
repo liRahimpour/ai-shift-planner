@@ -181,7 +181,7 @@ public class ScheduleValidator {
                     .toList();
 
             var start = shift.getStartTime();
-            var end = shift.isCrossesMidnight() ? java.time.LocalTime.MAX : shift.getEndTime();
+            var end = shift.isCrossesMidnight() ? com.aishiftplanner.scheduler.shared.domain.TimeWindow.END_OF_DAY : shift.getEndTime();
 
             if (onDate.isEmpty()) {
                 issues.add(ValidationIssue.warning(

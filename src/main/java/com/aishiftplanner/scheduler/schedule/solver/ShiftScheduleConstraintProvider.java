@@ -429,7 +429,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
         // For a midnight-crossing shift, the availability check uses the portion that falls
         // on the shift's start date; the remainder is covered by the next day's declaration
         // if the employee made one, and by the rest-time constraint either way.
-        var end = slot.getShift().crossesMidnight() ? java.time.LocalTime.MAX : slot.getShift().endTime();
+        var end = slot.getShift().crossesMidnight() ? com.aishiftplanner.scheduler.shared.domain.TimeWindow.END_OF_DAY : slot.getShift().endTime();
 
         boolean blocked = declared.stream()
                 .anyMatch(a -> a.type() == AvailabilityType.UNAVAILABLE && a.overlaps(start, end));
@@ -447,7 +447,7 @@ public class ShiftScheduleConstraintProvider implements ConstraintProvider {
             return false;
         }
         var start = slot.getShift().startTime();
-        var end = slot.getShift().crossesMidnight() ? java.time.LocalTime.MAX : slot.getShift().endTime();
+        var end = slot.getShift().crossesMidnight() ? com.aishiftplanner.scheduler.shared.domain.TimeWindow.END_OF_DAY : slot.getShift().endTime();
         return declared.stream().anyMatch(a -> a.type() == type && a.covers(start, end));
     }
 

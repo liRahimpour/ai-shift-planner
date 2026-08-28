@@ -5,6 +5,7 @@ import com.aishiftplanner.scheduler.schedule.solver.AvailabilitySlot;
 import com.aishiftplanner.scheduler.schedule.solver.PlanningEmployee;
 import com.aishiftplanner.scheduler.schedule.solver.ShiftSchedule;
 import com.aishiftplanner.scheduler.schedule.solver.ShiftSlot;
+import com.aishiftplanner.scheduler.shared.domain.TimeWindow;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalTime;
@@ -88,7 +89,7 @@ public class ScheduleMetricsCalculator {
             return false;
         }
         LocalTime start = slot.getShift().startTime();
-        LocalTime end = slot.getShift().crossesMidnight() ? LocalTime.MAX : slot.getShift().endTime();
+        LocalTime end = slot.getShift().crossesMidnight() ? TimeWindow.END_OF_DAY : slot.getShift().endTime();
         return declared.stream()
                 .anyMatch(a -> a.type() == AvailabilityType.PREFERRED && a.covers(start, end));
     }

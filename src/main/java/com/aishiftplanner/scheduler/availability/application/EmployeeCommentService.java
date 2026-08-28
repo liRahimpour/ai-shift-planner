@@ -164,7 +164,7 @@ public class EmployeeCommentService {
         return caller;
     }
 
-    static CommentResponse toResponse(EmployeeComment comment, List<CommentInterpretation> interpretations) {
+    public static CommentResponse toResponse(EmployeeComment comment, List<CommentInterpretation> interpretations) {
         return new CommentResponse(
                 comment.getId(),
                 comment.getPlanningPeriodId(),
@@ -174,7 +174,7 @@ public class EmployeeCommentService {
                 interpretations.stream().map(EmployeeCommentService::toResponse).toList());
     }
 
-    static InterpretationResponse toResponse(CommentInterpretation interpretation) {
+    public static InterpretationResponse toResponse(CommentInterpretation interpretation) {
         return new InterpretationResponse(
                 interpretation.getId(),
                 interpretation.getCommentId(),

@@ -232,7 +232,7 @@ public class ScheduleQueryService {
                     .filter(a -> a.getDate().equals(shift.getDate()))
                     .toList();
             var start = shift.getStartTime();
-            var end = shift.isCrossesMidnight() ? java.time.LocalTime.MAX : shift.getEndTime();
+            var end = shift.isCrossesMidnight() ? com.aishiftplanner.scheduler.shared.domain.TimeWindow.END_OF_DAY : shift.getEndTime();
 
             boolean blocked = declared.stream()
                     .anyMatch(a -> a.getAvailabilityType() == AvailabilityType.UNAVAILABLE

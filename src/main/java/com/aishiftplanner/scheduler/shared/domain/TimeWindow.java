@@ -20,6 +20,19 @@ import java.time.LocalTime;
  */
 public record TimeWindow(LocalDateTime start, LocalDateTime end) {
 
+    /**
+     * The end of a calendar day for availability purposes.
+     *
+     * <p>Deliberately 23:59 rather than {@link java.time.LocalTime#MAX}. When checking whether someone's
+     * declared availability covers the same-day part of an overnight shift, the comparison is
+     * against this value — and {@code LocalTime.MAX} is 23:59:59.999999999, so a perfectly
+     * sensible "available until 23:59" would fail to cover it by a fraction of a second and
+     * the person would be treated as unavailable for every bar shift. The rule this encodes is
+     * simple and explainable to a user: <em>to be eligible for an overnight shift, declare
+     * availability through to 23:59</em> (or the whole day).
+     */
+    public static final LocalTime END_OF_DAY = LocalTime.of(23, 59);
+
     public TimeWindow {
         if (!end.isAfter(start)) {
             throw new IllegalArgumentException("A time window must end after it starts: " + start + " → " + end);
