@@ -61,13 +61,19 @@ CREATE TABLE shifts (
     start_time         TIME        NOT NULL,
     end_time           TIME        NOT NULL,
     crosses_midnight   BOOLEAN     NOT NULL DEFAULT FALSE,
+    -- required_employees is the target (the requirement's preferred count) and equals the
+    -- number of seats generated. minimum_employees is the floor the hard constraints defend:
+    -- a schedule that drops below it is infeasible, not merely worse.
     required_employees INTEGER     NOT NULL,
+    minimum_employees  INTEGER     NOT NULL DEFAULT 0,
     status             VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     version            BIGINT      NOT NULL DEFAULT 0,
     CONSTRAINT ck_shifts_status CHECK (status IN ('DRAFT', 'PLANNED', 'PUBLISHED', 'LOCKED')),
-    CONSTRAINT ck_shifts_required_employees CHECK (required_employees >= 0),
+    CONSTRAINT ck_shifts_required_employees CHECK (
+        required_employees >= 0 AND minimum_employees >= 0 AND minimum_employees <= required_employees
+    ),
     CONSTRAINT ck_shifts_times CHECK (crosses_midnight OR end_time > start_time)
 );
 CREATE INDEX ix_shifts_period_date ON shifts (planning_period_id, date);

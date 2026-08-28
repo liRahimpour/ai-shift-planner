@@ -166,6 +166,7 @@ public class StaffingRequirementService {
                     requirement.getEndTime(),
                     requirement.isCrossesMidnight(),
                     requirement.getPreferredStaff());
+            shift.setMinimumEmployees(requirement.getMinimumStaff());
             shift.setRequirementId(requirement.getId());
             shift.setRequiredSkills(requirement.getRequiredSkills());
             shifts.add(shift);

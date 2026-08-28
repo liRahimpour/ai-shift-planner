@@ -54,8 +54,17 @@ public class Shift extends TenantScopedEntity {
     @Column(name = "crosses_midnight", nullable = false)
     private boolean crossesMidnight;
 
+    /** Target headcount; equals the number of seats generated for this shift. */
     @Column(name = "required_employees", nullable = false)
     private int requiredEmployees;
+
+    /**
+     * The floor the hard constraints defend. Falling below it makes a schedule infeasible,
+     * not merely worse — which is what distinguishes "we would like four people" from "we
+     * cannot open the kitchen with fewer than three".
+     */
+    @Column(name = "minimum_employees", nullable = false)
+    private int minimumEmployees;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -167,6 +176,14 @@ public class Shift extends TenantScopedEntity {
 
     public void setRequiredEmployees(int requiredEmployees) {
         this.requiredEmployees = requiredEmployees;
+    }
+
+    public int getMinimumEmployees() {
+        return minimumEmployees;
+    }
+
+    public void setMinimumEmployees(int minimumEmployees) {
+        this.minimumEmployees = minimumEmployees;
     }
 
     public ShiftStatus getStatus() {
