@@ -31,18 +31,6 @@ spring:
     baseline-on-migrate: false
     locations: classpath:db/migration
 
-  ai:
-    ollama:
-      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
-      chat:
-        model: ${OLLAMA_MODEL:llama3.1}
-        options:
-          temperature: 0.2
-      init:
-        # Never let a missing local model block application startup; the AiService layer
-        # degrades to AI_TEMPORARILY_UNAVAILABLE instead (see docs/adr/003).
-        pull-model-strategy: never
-
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
@@ -71,6 +59,19 @@ app:
     access-token-ttl-minutes: ${JWT_ACCESS_TOKEN_TTL_MINUTES:30}
     refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:14}
   default-timezone: ${APP_DEFAULT_TIMEZONE:Europe/Berlin}
+
+  ai:
+    # The model is never hardcoded in business code - see docs/adr/002.
+    enabled: ${AI_ENABLED:true}
+    base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+    model: ${OLLAMA_MODEL:llama3.1}
+    temperature: ${OLLAMA_TEMPERATURE:0.2}
+    # Kept short on purpose: a manager waiting on a chat answer would rather be told the AI
+    # is unavailable than watch a spinner.
+    request-timeout-seconds: ${AI_REQUEST_TIMEOUT_SECONDS:30}
+    max-tool-calls-per-conversation: ${AI_MAX_TOOL_CALLS:5}
+    minimum-confidence-for-auto-apply: ${AI_MIN_CONFIDENCE:0.85}
+
   scheduling:
     # Labour-law limits are configuration, never constants in the constraint code - see
     # SchedulingProperties. Defaults below match German ArbZG; override per deployment.
