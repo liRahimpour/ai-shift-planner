@@ -1,0 +1,47 @@
+# Development overrides: small, cheap, verbose.
+
+replicaCount: 1
+
+image:
+  tag: main
+  pullPolicy: Always
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+autoscaling:
+  enabled: false
+
+# One replica cannot satisfy a disruption budget without blocking node drains entirely.
+podDisruptionBudget:
+  enabled: false
+
+ingress:
+  enabled: true
+  className: nginx
+  host: ai-shift-planner.dev.example.com
+  tls:
+    enabled: false
+
+config:
+  springProfilesActive: dev
+  logLevel: DEBUG
+  scheduling:
+    # Short solver budget so a developer iterating on constraints waits seconds, not half a
+    # minute, per run.
+    solverSeconds: 10
+
+database:
+  host: postgres
+  name: ai_shift_planner_dev
+
+ollama:
+  baseUrl: http://ollama:11434
+  model: llama3.1
+
+secrets:
+  existingSecret: ai-shift-planner-dev-secrets

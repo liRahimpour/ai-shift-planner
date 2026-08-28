@@ -1,0 +1,44 @@
+version: 2
+
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # Patch and minor bumps grouped into one PR: twenty individual PRs a week get ignored
+    # wholesale, which is worse for security than a single reviewable batch.
+    groups:
+      maven-minor-and-patch:
+        update-types: [minor, patch]
+    labels: [dependencies, java]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, docker]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      github-actions:
+        update-types: [minor, patch]
+    labels: [dependencies, ci]
+
+  # Present for when a frontend is added; harmless until then.
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    labels: [dependencies, frontend]

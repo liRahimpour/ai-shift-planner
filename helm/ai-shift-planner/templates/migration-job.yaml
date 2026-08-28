@@ -1,0 +1,75 @@
+{{- if .Values.migration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # A unique name per revision: Job spec is immutable, so reusing a name makes the second
+  # upgrade fail with "field is immutable" rather than running the migration.
+  name: {{ include "ai-shift-planner.fullname" . }}-migrate-{{ .Release.Revision }}
+  labels:
+    {{- include "ai-shift-planner.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    # pre-upgrade AND pre-install: the schema must exist before the first pod starts, and
+    # must be current before any new pod starts on an upgrade.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    # Successful Jobs are deleted before the next run so the namespace does not accumulate
+    # one Job per release; a FAILED job is deliberately kept, because its logs are the first
+    # thing anyone needs when a deploy stops here.
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migration.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-shift-planner.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "ai-shift-planner.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: flyway-migrate
+          image: {{ include "ai-shift-planner.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          # The same image as the application, run in a mode that applies migrations and
+          # exits. Using the application image rather than a standalone Flyway image
+          # guarantees the migration scripts are exactly the ones this version expects -
+          # a separate image is one more thing that can be a version behind.
+          args:
+            - --spring.main.web-application-type=none
+            - --spring.flyway.enabled=true
+            - --spring.jpa.hibernate.ddl-auto=none
+            - --app.migration-only=true
+          env:
+            {{- include "ai-shift-planner.commonEnv" . | nindent 12 }}
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret | quote }}
+                  key: {{ .Values.secrets.keys.jwtSecret | quote }}
+            # AI is irrelevant to a migration; switching it off avoids a pointless connection
+            # attempt and a misleading warning in the Job's logs.
+            - name: AI_ENABLED
+              value: "false"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

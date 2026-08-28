@@ -1,0 +1,16 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "ai-shift-planner.fullname" . }}
+  labels:
+    {{- include "ai-shift-planner.labels" . | nindent 4 }}
+spec:
+  # Keeps a node drain (an upgrade, a scale-down) from taking the whole service offline.
+  # Note that with replicaCount 1 this would block drains entirely, which is why the dev
+  # values switch it off rather than setting minAvailable to 0.
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "ai-shift-planner.selectorLabels" . | nindent 6 }}
+{{- end }}

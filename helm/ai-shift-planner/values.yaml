@@ -1,0 +1,158 @@
+# Default values for ai-shift-planner.
+# Overridden per environment by values-dev.yaml / values-prod.yaml.
+
+replicaCount: 2
+
+image:
+  repository: docker.io/CHANGE_ME/ai-shift-planner
+  # Empty means "use the chart's appVersion". Pin an explicit tag in production values -
+  # `latest` makes it impossible to tell what is actually running, and makes a rollback a
+  # guess rather than a command.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  host: ai-shift-planner.example.com
+  path: /
+  pathType: Prefix
+  tls:
+    enabled: false
+    secretName: ai-shift-planner-tls
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    # No CPU limit by default, deliberately. The solver is CPU-bound and bursty; a CPU limit
+    # makes the kernel throttle it mid-solve, so a run that should take 30 seconds takes
+    # minutes. Memory IS limited, because a leak must not take the node down with it.
+    memory: 2Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Kubernetes waits this long for a pod to finish in-flight work after SIGTERM. Must exceed
+# the application's own graceful-shutdown window (spring.lifecycle.timeout-per-shutdown-phase,
+# 25s) or the platform kills requests the application was about to complete cleanly.
+terminationGracePeriodSeconds: 45
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# --- Application configuration ------------------------------------------------
+config:
+  springProfilesActive: prod
+  logLevel: INFO
+  defaultTimezone: Europe/Berlin
+  # Labour-law limits are configuration, not constants in the code (see ADR and
+  # SchedulingProperties). Set these per jurisdiction and collective agreement.
+  scheduling:
+    minimumRestHours: 11
+    maximumHoursPerDay: 10
+    maximumConsecutiveDays: 6
+    solverSeconds: 30
+
+database:
+  host: postgres.database.svc.cluster.local
+  port: 5432
+  name: ai_shift_planner
+  # Extra JDBC parameters, e.g. "?sslmode=require"
+  options: ""
+
+ollama:
+  # A separate deployment, not a sidecar: it may need far more memory (and optionally a GPU)
+  # than the backend, and coupling their lifecycles would mean scaling one to scale the other.
+  baseUrl: http://ollama.ai.svc.cluster.local:11434
+  model: llama3.1
+  enabled: true
+
+# --- Secrets ------------------------------------------------------------------
+# No secret values live in this file, ever. The chart references a Secret created out of band
+# (kubectl, sealed-secrets, External Secrets Operator, Vault) and fails loudly if it is
+# missing rather than starting with a default credential.
+secrets:
+  existingSecret: ai-shift-planner-secrets
+  keys:
+    databaseUsername: DB_USERNAME
+    databasePassword: DB_PASSWORD
+    jwtSecret: JWT_SECRET
+
+# --- Database migrations ------------------------------------------------------
+migration:
+  # Flyway runs as a pre-upgrade Helm hook Job, not inside every pod's startup. With several
+  # replicas rolling at once, in-pod migration means N pods racing to apply the same schema
+  # change; Flyway's lock makes that safe but serialises every startup behind it, and a
+  # failure mid-roll leaves pods on mixed schema versions. A Job runs once, before any new
+  # pod starts, and a failed migration aborts the release. See docs/adr and section 64.
+  enabled: true
+  backoffLimit: 1
+  activeDeadlineSeconds: 600
+
+probes:
+  liveness:
+    path: /actuator/health/liveness
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 3
+  readiness:
+    path: /actuator/health/readiness
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 3
+  startup:
+    # Generous on purpose: JVM start plus Flyway validation plus connection-pool warmup can
+    # take a while on a cold node, and a startup probe that fires too early produces a
+    # crash-loop that looks like an application bug.
+    path: /actuator/health/readiness
+    periodSeconds: 5
+    failureThreshold: 30
+
+extraEnv: []

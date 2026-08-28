@@ -1,0 +1,31 @@
+{{- if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "ai-shift-planner.fullname" . }}
+  labels:
+    {{- include "ai-shift-planner.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "ai-shift-planner.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+  behavior:
+    scaleUp:
+      # React quickly to load: a manager waiting on a planning run is waiting on a CPU.
+      stabilizationWindowSeconds: 60
+    scaleDown:
+      # Scale down slowly. A solver run can take a minute; an eager scale-down would kill
+      # pods mid-solve and hand the work back to the queue, which looks to a user like the
+      # feature is broken rather than busy.
+      stabilizationWindowSeconds: 300
+{{- end }}

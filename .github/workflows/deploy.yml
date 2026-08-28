@@ -1,0 +1,68 @@
+name: Deploy
+
+# Deliberately manual. An automatic production deploy on every green build is a fine goal,
+# but it is not one to adopt before the team has the rollback story and the monitoring to
+# notice a bad release. Until then, a human picks the version and the environment.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: environment
+        required: true
+      imageTag:
+        description: Image tag to deploy, e.g. v1.0.0
+        type: string
+        required: true
+      namespace:
+        description: Kubernetes namespace
+        type: string
+        required: true
+        default: ai-shift-planner
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: helm upgrade --install
+    runs-on: ubuntu-latest
+    # GitHub Environments carry the approval rules and the per-environment secrets, so
+    # production can require a reviewer without that policy living in this file.
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      # Cluster credentials never live in the repository. KUBE_CONFIG is an environment
+      # secret, written to a temporary file and used for this run only.
+      - name: Configure kubectl
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Deploy
+        run: |
+          helm upgrade --install ai-shift-planner ./helm/ai-shift-planner \
+            --namespace "${{ inputs.namespace }}" \
+            --create-namespace \
+            --values ./helm/ai-shift-planner/values-prod.yaml \
+            --set image.repository=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/ai-shift-planner \
+            --set image.tag=${{ inputs.imageTag }} \
+            --wait \
+            --timeout 10m \
+            --atomic
+          # --atomic rolls back automatically if the release does not become ready, so a
+          # failed deploy leaves the previous working version serving traffic rather than a
+          # half-applied one.
+
+      - name: Report status
+        if: always()
+        run: |
+          helm status ai-shift-planner --namespace "${{ inputs.namespace }}" || true
+          kubectl get pods --namespace "${{ inputs.namespace }}" || true

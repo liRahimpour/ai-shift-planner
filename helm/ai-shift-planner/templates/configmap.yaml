@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ai-shift-planner.fullname" . }}-config
+  labels:
+    {{- include "ai-shift-planner.labels" . | nindent 4 }}
+data:
+  # Non-secret configuration only. Credentials come from the referenced Secret; anything in
+  # here is readable by anyone with `get configmap` in the namespace.
+  SERVER_PORT: {{ .Values.service.targetPort | quote }}
+  APP_DEFAULT_TIMEZONE: {{ .Values.config.defaultTimezone | quote }}
+
+  # Labour-law limits: configuration, never constants in the constraint code, because they
+  # differ by jurisdiction and collective agreement.
+  SCHEDULING_MIN_REST_HOURS: {{ .Values.config.scheduling.minimumRestHours | quote }}
+  SCHEDULING_MAX_HOURS_PER_DAY: {{ .Values.config.scheduling.maximumHoursPerDay | quote }}
+  SCHEDULING_MAX_CONSECUTIVE_DAYS: {{ .Values.config.scheduling.maximumConsecutiveDays | quote }}
+  SCHEDULING_SOLVER_SECONDS: {{ .Values.config.scheduling.solverSeconds | quote }}
+
+  AI_ENABLED: {{ .Values.ollama.enabled | quote }}
+  OLLAMA_BASE_URL: {{ .Values.ollama.baseUrl | quote }}
+  OLLAMA_MODEL: {{ .Values.ollama.model | quote }}

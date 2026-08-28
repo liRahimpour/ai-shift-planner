@@ -1,0 +1,27 @@
+apiVersion: v2
+name: ai-shift-planner
+description: AI-assisted shift scheduling platform for gastronomy businesses
+type: application
+
+# version = the chart's own version; appVersion = the default application version. They move
+# independently: a chart fix (a probe path, a resource default) should not pretend to be a
+# new application release.
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - scheduling
+  - workforce
+  - gastronomy
+  - timefold
+
+home: https://github.com/liRahimpour/ai-shift-planner
+sources:
+  - https://github.com/liRahimpour/ai-shift-planner
+
+maintainers:
+  - name: AI Shift Planner team
+
+# PostgreSQL is intentionally NOT a dependency of this chart. Production should use a managed
+# database with its own backups, failover and lifecycle - not one whose deletion is a side
+# effect of `helm uninstall`. See docs/adr/004 and values.yaml.
