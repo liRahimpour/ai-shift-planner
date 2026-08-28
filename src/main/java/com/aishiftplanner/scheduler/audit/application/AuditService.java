@@ -71,6 +71,36 @@ public class AuditService {
         }
     }
 
+    /**
+     * Records an entry with an explicitly supplied tenant and actor.
+     *
+     * <p>Needed for work that runs off the request thread — a solver job, a scheduled
+     * archival — where there is no {@code SecurityContext} to read the caller from. Without
+     * this variant, exactly the long-running actions most worth auditing would be the ones
+     * that silently produce no audit entry.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordAs(
+            UUID organizationId,
+            UUID actorUserId,
+            AuditAction action,
+            String entityType,
+            UUID entityId,
+            Map<String, Object> metadata) {
+        try {
+            auditLogRepository.save(new AuditLogEntry(
+                    organizationId,
+                    actorUserId,
+                    action,
+                    entityType,
+                    entityId,
+                    toJson(metadata),
+                    CorrelationIdFilter.currentOrNew()));
+        } catch (RuntimeException ex) {
+            log.error("Failed to write audit entry for action {} on {} {}", action, entityType, entityId, ex);
+        }
+    }
+
     /** Convenience for the very common "one before/after pair" case. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordChange(
