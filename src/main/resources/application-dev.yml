@@ -10,3 +10,8 @@ logging:
 springdoc:
   swagger-ui:
     enabled: true
+
+app:
+  # Off unless explicitly enabled, even in dev: a seeder that runs by default is one
+  # configuration mistake away from inventing staff in a real database.
+  seed-demo-data: ${SEED_DEMO_DATA:false}
