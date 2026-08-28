@@ -1,0 +1,80 @@
+spring:
+  application:
+    name: ai-shift-planner
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/ai_shift_planner}
+    username: ${DATABASE_USERNAME:ai_shift_planner}
+    password: ${DATABASE_PASSWORD:ai_shift_planner}
+    hikari:
+      pool-name: ai-shift-planner-pool
+      # Keep pods responsive under Kubernetes' rolling restarts; a stuck connection should
+      # not stall an entire pod.
+      connection-timeout: 10000
+      max-lifetime: 1800000
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Schema is owned by Flyway migrations, never by Hibernate - see docs/adr/004.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+    locations: classpath:db/migration
+
+  ai:
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        model: ${OLLAMA_MODEL:llama3.1}
+        options:
+          temperature: 0.2
+      init:
+        # Never let a missing local model block application startup; the AiService layer
+        # degrades to AI_TEMPORARILY_UNAVAILABLE instead (see docs/adr/003).
+        pull-model-strategy: never
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring.lifecycle.timeout-per-shutdown-phase: 25s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:CHANGE_ME_LOCAL_DEV_ONLY_CHANGE_ME_LOCAL_DEV_ONLY}
+    access-token-ttl-minutes: ${JWT_ACCESS_TOKEN_TTL_MINUTES:30}
+    refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:14}
+  default-timezone: ${APP_DEFAULT_TIMEZONE:Europe/Berlin}
+
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}
+  pattern:
+    # correlationId comes from CorrelationIdFilter via MDC; never log secrets/tokens here.
+    level: "%5p [%X{correlationId:-none}]"

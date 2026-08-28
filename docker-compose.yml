@@ -1,0 +1,70 @@
+name: ai-shift-planner
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_shift_planner}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_shift_planner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_local_dev_only}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_shift_planner}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Real GPU acceleration is opt-in and documented in docs/architecture.md; CPU inference
+    # works out of the box for the MVP, just slower.
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      SERVER_PORT: ${SERVER_PORT:-8080}
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-ai_shift_planner}
+      DATABASE_USERNAME: ${POSTGRES_USER:-ai_shift_planner}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change_me_local_dev_only}
+      JWT_SECRET: ${JWT_SECRET:-change_me_local_dev_only_change_me_local_dev_only}
+      JWT_ACCESS_TOKEN_TTL_MINUTES: ${JWT_ACCESS_TOKEN_TTL_MINUTES:-30}
+      JWT_REFRESH_TOKEN_TTL_DAYS: ${JWT_REFRESH_TOKEN_TTL_DAYS:-14}
+      APP_DEFAULT_TIMEZONE: ${APP_DEFAULT_TIMEZONE:-Europe/Berlin}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1}
+    ports:
+      - "8080:8080"
+    volumes:
+      - maven_cache:/root/.m2
+
+  # Optional: lightweight DB admin UI. Start with `docker compose --profile tools up`.
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    profiles: ["tools"]
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  ollama_data:
+  maven_cache:

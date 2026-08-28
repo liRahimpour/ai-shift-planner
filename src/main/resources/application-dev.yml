@@ -1,0 +1,12 @@
+spring:
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    com.aishiftplanner: DEBUG
+    org.hibernate.SQL: DEBUG
+
+springdoc:
+  swagger-ui:
+    enabled: true

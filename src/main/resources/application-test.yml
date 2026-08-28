@@ -1,0 +1,10 @@
+# Used by @ActiveProfiles("test") in integration tests. Testcontainers supplies the actual
+# datasource URL/credentials via @ServiceConnection, so only non-datasource overrides live
+# here.
+spring:
+  flyway:
+    enabled: true
+
+app:
+  jwt:
+    secret: test-only-secret-not-used-in-production-min-32-bytes-long
