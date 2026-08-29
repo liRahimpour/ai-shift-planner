@@ -23,6 +23,34 @@ spec:
     - host: {{ .Values.ingress.host | quote }}
       http:
         paths:
+          {{- if .Values.frontend.enabled }}
+          # API paths are listed FIRST and with an exact prefix. Ingress controllers match
+          # the longest prefix, but stating the specific rules before the catch-all keeps the
+          # intent readable: everything under /api and /actuator is the backend, everything
+          # else is the single-page app.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ai-shift-planner.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+          - path: /actuator
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ai-shift-planner.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ai-shift-planner.frontendName" . }}
+                port:
+                  number: {{ .Values.frontend.service.port }}
+          {{- else }}
+          # Backend-only install: the API is served at the ingress root.
           - path: {{ .Values.ingress.path }}
             pathType: {{ .Values.ingress.pathType }}
             backend:
@@ -30,4 +58,5 @@ spec:
                 name: {{ include "ai-shift-planner.fullname" . }}
                 port:
                   number: {{ .Values.service.port }}
+          {{- end }}
 {{- end }}

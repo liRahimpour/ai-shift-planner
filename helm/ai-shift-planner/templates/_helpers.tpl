@@ -89,3 +89,35 @@ confusing failure.
 - name: LOG_LEVEL
   value: {{ .Values.config.logLevel | quote }}
 {{- end }}
+
+{{/*
+Frontend naming and labels.
+
+The frontend deliberately uses a DIFFERENT app.kubernetes.io/name than the backend rather
+than only an extra component label: the backend Service selects on name+instance, so sharing
+the name would make it route API traffic to nginx pods roughly half the time - a failure that
+looks like random 404s and takes a long afternoon to diagnose.
+*/}}
+{{- define "ai-shift-planner.frontendName" -}}
+{{- printf "%s-frontend" (include "ai-shift-planner.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "ai-shift-planner.frontendSelectorLabels" -}}
+app.kubernetes.io/name: {{ printf "%s-frontend" (include "ai-shift-planner.name" .) }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{- define "ai-shift-planner.frontendLabels" -}}
+helm.sh/chart: {{ include "ai-shift-planner.chart" . }}
+{{ include "ai-shift-planner.frontendSelectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/component: frontend
+{{- end }}
+
+{{- define "ai-shift-planner.frontendImage" -}}
+{{- $tag := .Values.frontend.image.tag | default .Values.image.tag | default .Chart.AppVersion -}}
+{{- printf "%s:%s" .Values.frontend.image.repository $tag -}}
+{{- end }}

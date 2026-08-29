@@ -156,3 +156,30 @@ probes:
     failureThreshold: 30
 
 extraEnv: []
+
+# --- Frontend (React SPA served by nginx) -------------------------------------
+# Off by default so an API-only install stays an API-only install. When enabled, the
+# ingress routes /api and /actuator to the backend and everything else to the SPA, which
+# means the browser only ever talks to one origin and there is no CORS to configure.
+frontend:
+  enabled: false
+  replicaCount: 2
+  image:
+    repository: docker.io/<dockerhub-user>/ai-shift-planner-frontend
+    # Falls back to image.tag, then to the chart's appVersion, so a release usually only
+    # sets one tag for both images.
+    tag: ""
+  service:
+    port: 80
+  strategy:
+    maxUnavailable: 0
+    maxSurge: 1
+  autoscaling:
+    enabled: false
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi

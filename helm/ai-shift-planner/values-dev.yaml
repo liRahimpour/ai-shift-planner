@@ -45,3 +45,7 @@ ollama:
 
 secrets:
   existingSecret: ai-shift-planner-dev-secrets
+
+frontend:
+  enabled: true
+  replicaCount: 1

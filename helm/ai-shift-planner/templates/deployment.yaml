@@ -62,6 +62,13 @@ spec:
                 name: {{ include "ai-shift-planner.fullname" . }}-config
           env:
             {{- include "ai-shift-planner.commonEnv" . | nindent 12 }}
+            # When the pre-upgrade migration Job owns the schema, application pods must NOT
+            # also run Flyway: the Job has already migrated by the time any new pod starts, so
+            # in-pod migration would only re-acquire Flyway's lock and serialise every startup
+            # behind it - exactly what the Job exists to avoid. With migration.enabled=false
+            # (single-replica dev installs, no Job) pods migrate themselves as before.
+            - name: SPRING_FLYWAY_ENABLED
+              value: {{ not .Values.migration.enabled | quote }}
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:

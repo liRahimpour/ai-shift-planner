@@ -1,0 +1,71 @@
+{{- if .Values.frontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ai-shift-planner.frontendName" . }}
+  labels:
+    {{- include "ai-shift-planner.frontendLabels" . | nindent 4 }}
+spec:
+  {{- if not .Values.frontend.autoscaling.enabled }}
+  replicas: {{ .Values.frontend.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.frontend.strategy.maxUnavailable }}
+      maxSurge: {{ .Values.frontend.strategy.maxSurge }}
+  selector:
+    matchLabels:
+      {{- include "ai-shift-planner.frontendSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-shift-planner.frontendLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        # 101 is the uid baked into nginxinc/nginx-unprivileged. Stating it explicitly means
+        # clusters that require runAsUser to be set do not reject the pod, and a base-image
+        # change that alters the uid fails loudly here instead of silently running as root.
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          image: {{ include "ai-shift-planner.frontendImage" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # nginx needs to write its own temp/pid files, so the root filesystem stays
+            # writable here; everything it serves is baked into the image and read-only in
+            # practice.
+            readOnlyRootFilesystem: false
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # The SPA calls /api on its own origin and nginx proxies it to the backend
+            # Service, so there is no CORS configuration and no build-time backend URL.
+            - name: BACKEND_HOST
+              value: {{ include "ai-shift-planner.fullname" . | quote }}
+            - name: BACKEND_PORT
+              value: {{ .Values.service.port | quote }}
+          readinessProbe:
+            httpGet:
+              path: /index.html
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /index.html
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+{{- end }}

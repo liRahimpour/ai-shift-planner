@@ -67,6 +67,48 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `npm ci` (not `install`) so the lockfile is authoritative: CI must build the exact
+      # dependency tree a developer had, not whatever the ranges resolve to today.
+      - name: Install
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Build
+        run: npx vite build
+
+      - name: Docker build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          tags: ai-shift-planner-frontend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   helm:
     name: Helm chart
     runs-on: ubuntu-latest
