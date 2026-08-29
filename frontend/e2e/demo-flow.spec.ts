@@ -40,7 +40,7 @@ test.describe('Mitarbeiter-Selfservice', () => {
       .getByPlaceholder('Deine Anmerkung …')
       .fill('Samstag kann ich arbeiten, aber bitte erst ab 17 Uhr, weil ich vorher Uni habe.')
     await page.getByRole('button', { name: 'Anmerkung senden' }).click()
-    await expect(page.locator('.card-tight').getByText(/bitte erst ab 17 Uhr/)).toBeVisible()
+    await expect(page.locator('.card-tight').getByText(/bitte erst ab 17 Uhr/).last()).toBeVisible()
   })
 })
 
@@ -54,6 +54,13 @@ test.describe('Schichtleitung', () => {
     // Dashboard: the numbers a manager checks before planning.
     await expect(page.getByText('Verfügbarkeiten abgegeben')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Deadline' })).toBeVisible()
+
+    // Plan generation only unlocks once the period is marked ready - a deliberate workflow
+    // gate so a manager can't generate plans while availability is still being collected.
+    await page
+      .getByLabel('Status des Planungszeitraums')
+      .selectOption({ label: 'Bereit zur Planung' })
+    await expect(page.getByRole('button', { name: 'Pläne generieren' })).toBeEnabled()
 
     await page.getByRole('button', { name: 'Pläne generieren' }).click()
 
