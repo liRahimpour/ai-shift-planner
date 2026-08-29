@@ -40,7 +40,7 @@ test.describe('Mitarbeiter-Selfservice', () => {
       .getByPlaceholder('Deine Anmerkung …')
       .fill('Samstag kann ich arbeiten, aber bitte erst ab 17 Uhr, weil ich vorher Uni habe.')
     await page.getByRole('button', { name: 'Anmerkung senden' }).click()
-    await expect(page.getByText(/bitte erst ab 17 Uhr/)).toBeVisible()
+    await expect(page.locator('.card-tight').getByText(/bitte erst ab 17 Uhr/)).toBeVisible()
   })
 })
 
@@ -53,7 +53,7 @@ test.describe('Schichtleitung', () => {
 
     // Dashboard: the numbers a manager checks before planning.
     await expect(page.getByText('Verfügbarkeiten abgegeben')).toBeVisible()
-    await expect(page.getByText('Deadline')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Deadline' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Pläne generieren' }).click()
 
