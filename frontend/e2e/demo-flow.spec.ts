@@ -79,7 +79,7 @@ test.describe('Schichtleitung', () => {
     // Take the recommendation, then open it.
     const balanced = page.locator('.card', { has: page.getByRole('heading', { name: 'Ausgewogen' }) })
     await balanced.getByRole('button', { name: 'Diesen wählen' }).click()
-    await expect(balanced.getByText('gewählt')).toBeVisible()
+    await expect(balanced.getByText('gewählt', { exact: true })).toBeVisible()
     await balanced.getByRole('link', { name: 'Öffnen' }).click()
 
     // Manual control: pin one assignment so a re-run cannot move it.
