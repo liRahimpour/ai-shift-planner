@@ -82,7 +82,7 @@ jobs:
       # Scan the exact image that is about to be pushed. Scanning after publishing would
       # mean the vulnerable artefact is already available to pull.
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ai-shift-planner:scan
           format: table
@@ -152,7 +152,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ai-shift-planner-frontend:scan
           format: table
