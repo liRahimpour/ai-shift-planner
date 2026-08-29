@@ -24,7 +24,7 @@ RUN npm run typecheck && npm run test && npx vite build
 #
 # This variant is built for the job: it already runs as uid 101, listens on 8080, and owns
 # the directories it needs to write.
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
 
 # Files under /etc/nginx/templates get environment-variable substitution at startup, which
 # is how BACKEND_HOST/BACKEND_PORT reach the config without being baked into the image.
