@@ -281,7 +281,17 @@ public class DemoDataSeeder implements ApplicationRunner {
     private PlanningPeriod seedPlanningPeriod(UUID orgId, UUID locationId) {
         // Next Monday, so the demo period is always in the future no matter when it is run.
         LocalDate today = LocalDate.now(ZONE);
-        LocalDate start = today.plusDays((8 - today.getDayOfWeek().getValue()) % 7 + 1L);
+        long daysUntilMonday = (8 - today.getDayOfWeek().getValue()) % 7;
+        LocalDate start = today.plusDays(daysUntilMonday == 0 ? 7 : daysUntilMonday);
+
+        // The availability deadline sits 5 days before the period starts (the Wednesday
+        // before a Monday start). "Next Monday" alone is not enough of a buffer for that to
+        // land in the future: seeded on a Wednesday through Sunday, the nearest Monday is
+        // fewer than 5 days out and the deadline would already be in the past the moment the
+        // demo data exists. Roll forward an extra week whenever that would happen.
+        if (!start.minusDays(5).isAfter(today)) {
+            start = start.plusWeeks(1);
+        }
         LocalDate end = start.plusDays(6);
 
         PlanningPeriod period = new PlanningPeriod(
