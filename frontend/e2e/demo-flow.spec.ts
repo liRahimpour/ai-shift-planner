@@ -46,6 +46,9 @@ test.describe('Mitarbeiter-Selfservice', () => {
 
 test.describe('Schichtleitung', () => {
   test('generiert, vergleicht, bearbeitet und veröffentlicht einen Plan', async ({ page }) => {
+    // The 180s expect below for the real solver run needs more than the global per-test
+    // timeout (60s) - that timeout wins over a longer one on an individual assertion.
+    test.setTimeout(220_000)
     await login(page, 'manager@demo.local')
 
     await page.getByRole('link', { name: 'Planungszeiträume' }).click()
