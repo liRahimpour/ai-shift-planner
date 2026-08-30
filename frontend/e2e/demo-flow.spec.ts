@@ -40,12 +40,15 @@ test.describe('Mitarbeiter-Selfservice', () => {
       .getByPlaceholder('Deine Anmerkung …')
       .fill('Samstag kann ich arbeiten, aber bitte erst ab 17 Uhr, weil ich vorher Uni habe.')
     await page.getByRole('button', { name: 'Anmerkung senden' }).click()
-    await expect(page.getByText(/bitte erst ab 17 Uhr/)).toBeVisible()
+    await expect(page.locator('.card-tight').getByText(/bitte erst ab 17 Uhr/).last()).toBeVisible()
   })
 })
 
 test.describe('Schichtleitung', () => {
   test('generiert, vergleicht, bearbeitet und veröffentlicht einen Plan', async ({ page }) => {
+    // The 180s expect below for the real solver run needs more than the global per-test
+    // timeout (60s) - that timeout wins over a longer one on an individual assertion.
+    test.setTimeout(220_000)
     await login(page, 'manager@demo.local')
 
     await page.getByRole('link', { name: 'Planungszeiträume' }).click()
@@ -53,7 +56,14 @@ test.describe('Schichtleitung', () => {
 
     // Dashboard: the numbers a manager checks before planning.
     await expect(page.getByText('Verfügbarkeiten abgegeben')).toBeVisible()
-    await expect(page.getByText('Deadline')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Deadline' })).toBeVisible()
+
+    // Plan generation only unlocks once the period is marked ready - a deliberate workflow
+    // gate so a manager can't generate plans while availability is still being collected.
+    await page
+      .getByLabel('Status des Planungszeitraums')
+      .selectOption({ label: 'Bereit zur Planung' })
+    await expect(page.getByRole('button', { name: 'Pläne generieren' })).toBeEnabled()
 
     await page.getByRole('button', { name: 'Pläne generieren' }).click()
 
@@ -69,7 +79,7 @@ test.describe('Schichtleitung', () => {
     // Take the recommendation, then open it.
     const balanced = page.locator('.card', { has: page.getByRole('heading', { name: 'Ausgewogen' }) })
     await balanced.getByRole('button', { name: 'Diesen wählen' }).click()
-    await expect(balanced.getByText('gewählt')).toBeVisible()
+    await expect(balanced.getByText('gewählt', { exact: true })).toBeVisible()
     await balanced.getByRole('link', { name: 'Öffnen' }).click()
 
     // Manual control: pin one assignment so a re-run cannot move it.

@@ -44,6 +44,17 @@ jobs:
       - name: Integration tests and verify
         run: ./mvnw -B -ntp verify
 
+      # The E2E job runs the exact JAR verified above instead of rebuilding Java inside a
+      # fresh Docker build. Besides being faster, this removes a second network-dependent
+      # Maven resolution step from the product-flow test.
+      - name: Upload backend JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: target/ai-shift-planner.jar
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -55,6 +66,12 @@ jobs:
             target/site/jacoco/
           retention-days: 7
           if-no-files-found: ignore
+
+      # The GitHub Actions cache backend requires a BuildKit builder using the
+      # docker-container driver. Without this, build-push-action falls back to the plain
+      # docker driver and fails before the Dockerfile is even evaluated.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       # Builds the image without pushing it. A Dockerfile that stopped building would
       # otherwise only be discovered at release time, when it is most expensive.
@@ -100,6 +117,9 @@ jobs:
       - name: Build
         run: npx vite build
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Docker build (no push)
         uses: docker/build-push-action@v6
         with:
@@ -108,6 +128,124 @@ jobs:
           tags: ai-shift-planner-frontend:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  e2e:
+    name: Demo flow E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build, frontend]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Download verified backend JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: e2e-backend
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start PostgreSQL
+        run: |
+          docker compose up -d postgres
+          for attempt in {1..60}; do
+            if docker compose exec -T postgres pg_isready -U ai_shift_planner >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose logs --no-color postgres
+          exit 1
+
+      # Ollama is deliberately disabled here: scheduling must remain usable when the local
+      # model is unavailable. The chat test accepts the application's explicit offline state.
+      - name: Start backend
+        env:
+          SPRING_PROFILES_ACTIVE: dev
+          DATABASE_URL: jdbc:postgresql://localhost:5432/ai_shift_planner
+          DATABASE_USERNAME: ai_shift_planner
+          DATABASE_PASSWORD: change_me_local_dev_only
+          JWT_SECRET: change_me_local_dev_only_change_me_local_dev_only
+          SEED_DEMO_DATA: 'true'
+          AI_ENABLED: 'false'
+          SCHEDULING_SOLVER_SECONDS: '3'
+        run: |
+          nohup java -jar e2e-backend/ai-shift-planner.jar > /tmp/backend.log 2>&1 &
+          echo $! > /tmp/backend.pid
+
+      - name: Start frontend dev server
+        working-directory: frontend
+        run: |
+          nohup npm run dev -- --host 127.0.0.1 > /tmp/frontend.log 2>&1 &
+          echo $! > /tmp/frontend.pid
+
+      - name: Wait for application
+        run: |
+          for attempt in {1..90}; do
+            if curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null \
+              && curl -fsS http://localhost:5173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Application did not become ready"
+          cat /tmp/backend.log || true
+          cat /tmp/frontend.log || true
+          docker compose logs --no-color postgres
+          exit 1
+
+      - name: Run demo flow
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://localhost:5173
+        run: npm run e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Show application logs on failure
+        if: failure()
+        run: |
+          echo "===== backend ====="
+          cat /tmp/backend.log || true
+          echo "===== frontend ====="
+          cat /tmp/frontend.log || true
+          echo "===== postgres ====="
+          docker compose logs --no-color postgres || true
+
+      - name: Stop demo stack
+        if: always()
+        run: |
+          test ! -f /tmp/frontend.pid || kill "$(cat /tmp/frontend.pid)" 2>/dev/null || true
+          test ! -f /tmp/backend.pid || kill "$(cat /tmp/backend.pid)" 2>/dev/null || true
+          docker compose down -v
 
   helm:
     name: Helm chart

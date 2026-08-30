@@ -1,5 +1,6 @@
 package com.aishiftplanner.scheduler.shared.seed;
 
+import com.aishiftplanner.scheduler.auth.application.AuthenticatedUser;
 import com.aishiftplanner.scheduler.auth.domain.Role;
 import com.aishiftplanner.scheduler.auth.domain.User;
 import com.aishiftplanner.scheduler.auth.infrastructure.UserRepository;
@@ -21,6 +22,7 @@ import com.aishiftplanner.scheduler.organization.infrastructure.LocationReposito
 import com.aishiftplanner.scheduler.organization.infrastructure.OrganizationRepository;
 import com.aishiftplanner.scheduler.planning.domain.PlanningPeriod;
 import com.aishiftplanner.scheduler.planning.infrastructure.PlanningPeriodRepository;
+import com.aishiftplanner.scheduler.staffing.application.StaffingRequirementService;
 import com.aishiftplanner.scheduler.staffing.domain.StaffingRequirement;
 import com.aishiftplanner.scheduler.staffing.infrastructure.StaffingRequirementRepository;
 import java.math.BigDecimal;
@@ -41,9 +43,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Creates a realistic demo dataset: one restaurant in Mainz, three departments, 34 staff.
@@ -83,6 +88,8 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final AvailabilityRepository availabilityRepository;
     private final EmployeeCommentRepository commentRepository;
     private final PasswordEncoder passwordEncoder;
+    private final StaffingRequirementService staffingRequirementService;
+    private final PlatformTransactionManager transactionManager;
 
     public DemoDataSeeder(
             OrganizationRepository organizationRepository,
@@ -95,7 +102,9 @@ public class DemoDataSeeder implements ApplicationRunner {
             StaffingRequirementRepository staffingRequirementRepository,
             AvailabilityRepository availabilityRepository,
             EmployeeCommentRepository commentRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            StaffingRequirementService staffingRequirementService,
+            PlatformTransactionManager transactionManager) {
         this.organizationRepository = organizationRepository;
         this.locationRepository = locationRepository;
         this.departmentRepository = departmentRepository;
@@ -107,10 +116,11 @@ public class DemoDataSeeder implements ApplicationRunner {
         this.availabilityRepository = availabilityRepository;
         this.commentRepository = commentRepository;
         this.passwordEncoder = passwordEncoder;
+        this.staffingRequirementService = staffingRequirementService;
+        this.transactionManager = transactionManager;
     }
 
     @Override
-    @Transactional
     public void run(ApplicationArguments args) {
         if (organizationRepository.existsBySlug(ORGANIZATION_SLUG)) {
             log.info("Demo data already present; skipping seeding.");
@@ -118,6 +128,30 @@ public class DemoDataSeeder implements ApplicationRunner {
         }
         log.info("Seeding demo data...");
 
+        // TransactionTemplate rather than a self-invoked @Transactional method: calling an
+        // annotated method on `this` bypasses the Spring proxy that makes @Transactional work
+        // at all, which would silently leave this whole block non-transactional.
+        SeedResult result = new TransactionTemplate(transactionManager).execute(status -> seedCoreData());
+
+        // Deliberately outside the transaction above: generateShifts() writes an audit log
+        // entry in its own REQUIRES_NEW transaction, which would not yet be able to see the
+        // organization row if it were still uncommitted in an enclosing transaction.
+        generateShiftsAsAdmin(result.admin(), result.period().getId());
+
+        log.info(
+                "Demo data seeded: organization={} location={} employees={} period={}..{}",
+                result.organization().getName(),
+                result.location().getName(),
+                result.employees().size(),
+                result.period().getStartDate(),
+                result.period().getEndDate());
+        log.info("Demo logins (password '{}'): manager@demo.local, employee@demo.local", DEFAULT_PASSWORD);
+    }
+
+    private record SeedResult(
+            Organization organization, Location location, User admin, List<Employee> employees, PlanningPeriod period) {}
+
+    private SeedResult seedCoreData() {
         Organization organization = organizationRepository.save(
                 new Organization("Restaurant Group GmbH", ORGANIZATION_SLUG));
         UUID orgId = organization.getId();
@@ -132,21 +166,14 @@ public class DemoDataSeeder implements ApplicationRunner {
         Department bar = departmentRepository.save(new Department(orgId, mainz.getId(), "Bar"));
 
         Map<String, Skill> skills = seedSkills(orgId);
-        seedManagers(orgId);
+        User admin = seedManagers(orgId);
         List<Employee> employees = seedEmployees(orgId, mainz.getId(), List.of(kitchen, counter, bar), skills);
         PlanningPeriod period = seedPlanningPeriod(orgId, mainz.getId());
         seedStaffingRequirements(orgId, mainz.getId(), period, kitchen, counter, bar, skills);
         seedAvailability(orgId, period, employees);
         seedComments(orgId, period, employees);
 
-        log.info(
-                "Demo data seeded: organization={} location={} employees={} period={}..{}",
-                organization.getName(),
-                mainz.getName(),
-                employees.size(),
-                period.getStartDate(),
-                period.getEndDate());
-        log.info("Demo logins (password '{}'): manager@demo.local, employee@demo.local", DEFAULT_PASSWORD);
+        return new SeedResult(organization, mainz, admin, employees, period);
     }
 
     private Map<String, Skill> seedSkills(UUID orgId) {
@@ -166,7 +193,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         return saved;
     }
 
-    private void seedManagers(UUID orgId) {
+    private User seedManagers(UUID orgId) {
         User admin = new User(
                 orgId, "admin@demo.local", passwordEncoder.encode(DEFAULT_PASSWORD), "Olivia", "Admin");
         admin.setRoles(EnumSet.of(Role.ORG_ADMIN));
@@ -176,6 +203,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                 orgId, "manager@demo.local", passwordEncoder.encode(DEFAULT_PASSWORD), "Mia", "Manager");
         manager.setRoles(EnumSet.of(Role.SHIFT_MANAGER, Role.LOCATION_MANAGER));
         userRepository.save(manager);
+        return admin;
     }
 
     private List<Employee> seedEmployees(
@@ -281,7 +309,17 @@ public class DemoDataSeeder implements ApplicationRunner {
     private PlanningPeriod seedPlanningPeriod(UUID orgId, UUID locationId) {
         // Next Monday, so the demo period is always in the future no matter when it is run.
         LocalDate today = LocalDate.now(ZONE);
-        LocalDate start = today.plusDays((8 - today.getDayOfWeek().getValue()) % 7 + 1L);
+        long daysUntilMonday = (8 - today.getDayOfWeek().getValue()) % 7;
+        LocalDate start = today.plusDays(daysUntilMonday == 0 ? 7 : daysUntilMonday);
+
+        // The availability deadline sits 5 days before the period starts (the Wednesday
+        // before a Monday start). "Next Monday" alone is not enough of a buffer for that to
+        // land in the future: seeded on a Wednesday through Sunday, the nearest Monday is
+        // fewer than 5 days out and the deadline would already be in the past the moment the
+        // demo data exists. Roll forward an extra week whenever that would happen.
+        if (!start.minusDays(5).isAfter(today)) {
+            start = start.plusWeeks(1);
+        }
         LocalDate end = start.plusDays(6);
 
         PlanningPeriod period = new PlanningPeriod(
@@ -292,6 +330,27 @@ public class DemoDataSeeder implements ApplicationRunner {
                 start.minusDays(5).atTime(LocalTime.of(18, 0)).atZone(ZONE).toInstant(),
                 null);
         return planningPeriodRepository.save(period);
+    }
+
+    /**
+     * Materializes concrete shifts from the staffing requirements just seeded, exactly as a
+     * manager does by hand on the staffing screen. Without this, the demo period has staffing
+     * requirements but no shifts, and plan generation fails immediately with "No shifts exist
+     * for this planning period" - a dead end for anyone trying the demo.
+     *
+     * <p>{@link StaffingRequirementService#generateShifts} is tenant- and audit-aware, so it
+     * needs a real {@code Authentication} in context; there is none this early at startup, so
+     * one is set up for the seeded admin just for this call and cleared immediately after.
+     */
+    private void generateShiftsAsAdmin(User admin, UUID periodId) {
+        var authentication = new UsernamePasswordAuthenticationToken(
+                AuthenticatedUser.of(admin), null, AuthenticatedUser.of(admin).getAuthorities());
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        try {
+            staffingRequirementService.generateShifts(periodId);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 
     private void seedStaffingRequirements(
