@@ -51,6 +51,9 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
       AI_ENABLED: ${AI_ENABLED:-true}
+      # Keep the normal 30 s default for local/demo use, but allow CI and constrained
+      # environments to shorten the solver run without baking test behaviour into Java.
+      SCHEDULING_SOLVER_SECONDS: ${SCHEDULING_SOLVER_SECONDS:-30}
     ports:
       - "8080:8080"
     volumes:
