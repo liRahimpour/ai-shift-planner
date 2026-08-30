@@ -15,6 +15,10 @@ public interface ScheduleRepository extends JpaRepository<Schedule, UUID> {
 
     Optional<Schedule> findByPlanningPeriodIdAndSelectedTrue(UUID planningPeriodId);
 
+    /** Tenant-scoped variant used at trust boundaries such as the schedule chat. */
+    Optional<Schedule> findByPlanningPeriodIdAndOrganizationIdAndSelectedTrue(
+            UUID planningPeriodId, UUID organizationId);
+
     Optional<Schedule> findByPlanningPeriodIdAndStrategy(UUID planningPeriodId, PlanningStrategy strategy);
 
     void deleteAllByPlanningPeriodId(UUID planningPeriodId);
