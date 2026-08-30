@@ -7,14 +7,10 @@ import java.util.Map;
 /**
  * One backend capability the chat may use to answer a question.
  *
- * <p>The two-method shape is the whole security design: {@link #isPermittedFor} is asked
- * <em>before</em> {@link #execute} is called, and the model has no part in either. It cannot
- * see a tool it is not permitted to use, cannot invoke one it was not offered, and cannot
- * argue its way past the check, because the check never consults it.
- *
- * <p>Concretely: an employee asking "what does everyone earn?" does not get a refusal
- * negotiated in the prompt. The salary tool is never offered to them, and if a model invented
- * the call anyway it would be rejected before touching the database.
+ * <p>The permission check happens before execution and never consults the model. In addition,
+ * request context such as the planning period is passed separately as {@link ChatContext}; it
+ * is resolved server-side and is therefore not something the model can replace with a foreign
+ * id in its arguments.
  */
 public interface ChatTool {
 
@@ -24,22 +20,17 @@ public interface ChatTool {
     /** The model-facing description and parameter list. */
     AiToolSpec spec();
 
-    /**
-     * Whether this caller may use this tool at all.
-     *
-     * <p>Evaluated per request against the same roles the REST API uses, so chat and API can
-     * never disagree about who may see what.
-     */
+    /** Whether this caller may use this tool at all. */
     boolean isPermittedFor(AuthenticatedUser user);
 
     /**
      * Runs the tool and returns its result as JSON.
      *
-     * <p>Implementations must scope every query to {@code user}'s organization, and must treat
-     * {@code arguments} as untrusted: they are model output, not validated input.
+     * <p>{@code context} is trusted server-side state. {@code arguments} are untrusted model
+     * output and must be parsed and validated by the implementation.
      *
      * @return JSON that the model may phrase an answer from — never raw entities, never data
      *     the caller is not entitled to
      */
-    String execute(AuthenticatedUser user, Map<String, String> arguments);
+    String execute(AuthenticatedUser user, ChatContext context, Map<String, String> arguments);
 }
