@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Development image: keeps Maven + source so `docker compose up` gives fast iteration via
 # spring-boot:run instead of rebuilding a jar on every change. Not used in production.
-FROM maven:3.9.9-eclipse-temurin-21
+FROM maven:3.9.15-eclipse-temurin-26
 WORKDIR /workspace
 
 COPY pom.xml .
