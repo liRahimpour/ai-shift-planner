@@ -118,6 +118,78 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  e2e:
+    name: Demo flow E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build, frontend]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # The AI is deliberately disabled here: the scheduling product must remain fully usable
+      # when Ollama is unavailable. Starting only these services also keeps CI deterministic
+      # and avoids downloading a model just to prove the core product flow.
+      - name: Start seeded demo stack
+        env:
+          SEED_DEMO_DATA: 'true'
+          AI_ENABLED: 'false'
+          SCHEDULING_SOLVER_SECONDS: '3'
+        run: docker compose up -d --build postgres backend frontend
+
+      - name: Wait for application
+        run: |
+          for attempt in {1..90}; do
+            if curl -fsS http://localhost:8080/actuator/health/readiness >/dev/null \
+              && curl -fsS http://localhost:5173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Application did not become ready"
+          docker compose ps
+          docker compose logs --no-color backend frontend postgres
+          exit 1
+
+      - name: Run demo flow
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://localhost:5173
+        run: npm run e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Show stack logs on failure
+        if: failure()
+        run: docker compose logs --no-color backend frontend postgres
+
+      - name: Stop demo stack
+        if: always()
+        run: docker compose down -v
+
   helm:
     name: Helm chart
     runs-on: ubuntu-latest
