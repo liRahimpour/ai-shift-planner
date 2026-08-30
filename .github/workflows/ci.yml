@@ -56,6 +56,12 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # The GitHub Actions cache backend requires a BuildKit builder using the
+      # docker-container driver. Without this, build-push-action falls back to the plain
+      # docker driver and fails before the Dockerfile is even evaluated.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       # Builds the image without pushing it. A Dockerfile that stopped building would
       # otherwise only be discovered at release time, when it is most expensive.
       - name: Docker build (no push)
@@ -99,6 +105,9 @@ jobs:
 
       - name: Build
         run: npx vite build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Docker build (no push)
         uses: docker/build-push-action@v6
