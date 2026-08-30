@@ -32,7 +32,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- https://mvnrepository.com/artifact/ai.timefold.solver/timefold-solver-bom -->
-        <timefold.version>1.15.0</timefold.version>
+        <timefold.version>2.5.0</timefold.version>
         <!-- https://mvnrepository.com/artifact/org.mapstruct/mapstruct -->
         <mapstruct.version>1.6.3</mapstruct.version>
         <!-- https://mvnrepository.com/artifact/io.jsonwebtoken/jjwt-api -->
