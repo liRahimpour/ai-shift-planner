@@ -59,7 +59,7 @@ jobs:
 
       - name: Derive image tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/ai-shift-planner
           tags: |
@@ -131,7 +131,7 @@ jobs:
       # deployed next to it is the kind of mismatch nobody notices until a user does.
       - name: Derive image tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/ai-shift-planner-frontend
           tags: |
