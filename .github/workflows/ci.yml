@@ -71,7 +71,7 @@ jobs:
       # docker-container driver. Without this, build-push-action falls back to the plain
       # docker driver and fails before the Dockerfile is even evaluated.
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # Builds the image without pushing it. A Dockerfile that stopped building would
       # otherwise only be discovered at release time, when it is most expensive.
@@ -118,7 +118,7 @@ jobs:
         run: npx vite build
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Docker build (no push)
         uses: docker/build-push-action@v7
