@@ -11,8 +11,6 @@ import com.aishiftplanner.scheduler.availability.infrastructure.CommentInterpret
 import com.aishiftplanner.scheduler.availability.infrastructure.EmployeeCommentRepository;
 import com.aishiftplanner.scheduler.planning.application.PlanningPeriodService;
 import com.aishiftplanner.scheduler.planning.domain.PlanningPeriod;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -26,30 +24,31 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Extracts structured availability information from free-text employee comments.
  *
- * <p>Example: <em>"Samstag kann ich arbeiten, aber bitte erst ab 17 Uhr, weil ich vorher Uni
- * habe."</em> becomes a dated, typed, time-bounded interpretation with a confidence score.
+ * <p>Example:
+ * <em>"Samstag kann ich arbeiten, aber bitte erst ab 17 Uhr, weil ich vorher Uni habe."</em>
+ * becomes a dated, typed, time-bounded interpretation with a confidence score.
  *
- * <p>Three rules shape this class, and all three exist because a language model's output is a
- * suggestion, not a fact:
+ * <p>Three rules shape this class:
  *
  * <ol>
- *   <li><b>The original text is never modified or replaced.</b> Interpretations are stored
- *       alongside it.
- *   <li><b>Anything the model says outside the expected shape is discarded, not guessed at.</b>
- *       An unparseable date is dropped; it does not become "probably next Saturday".
- *   <li><b>Nothing becomes a hard constraint automatically.</b> Confidence gates whether an
- *       interpretation is applied as a soft hint; a human accepting it is what makes it
- *       binding (see {@code CommentInterpretation.isEnforceableAsHardConstraint}).
+ *   <li>The original text is never modified or replaced.
+ *   <li>Unexpected model output is discarded, not guessed.
+ *   <li>Nothing becomes a hard solver constraint automatically.
  * </ol>
  */
 @Service
 public class CommentInterpretationService {
 
-    private static final Logger log = LoggerFactory.getLogger(CommentInterpretationService.class);
+    private static final Logger log =
+            LoggerFactory.getLogger(
+                    CommentInterpretationService.class);
 
     private static final String JSON_SHAPE =
             """
@@ -65,10 +64,18 @@ public class CommentInterpretationService {
             """;
 
     private final LocalAiClient aiClient;
-    private final EmployeeCommentRepository commentRepository;
-    private final CommentInterpretationRepository interpretationRepository;
-    private final PlanningPeriodService planningPeriodService;
-    private final ObjectMapper objectMapper;
+
+    private final EmployeeCommentRepository
+            commentRepository;
+
+    private final CommentInterpretationRepository
+            interpretationRepository;
+
+    private final PlanningPeriodService
+            planningPeriodService;
+
+    private final JsonMapper jsonMapper;
+
     private final AiProperties properties;
 
     public CommentInterpretationService(
@@ -76,104 +83,202 @@ public class CommentInterpretationService {
             EmployeeCommentRepository commentRepository,
             CommentInterpretationRepository interpretationRepository,
             PlanningPeriodService planningPeriodService,
-            ObjectMapper objectMapper,
+            JsonMapper jsonMapper,
             AiProperties properties) {
-        this.aiClient = aiClient;
-        this.commentRepository = commentRepository;
-        this.interpretationRepository = interpretationRepository;
-        this.planningPeriodService = planningPeriodService;
-        this.objectMapper = objectMapper;
-        this.properties = properties;
+
+        this.aiClient =
+                aiClient;
+
+        this.commentRepository =
+                commentRepository;
+
+        this.interpretationRepository =
+                interpretationRepository;
+
+        this.planningPeriodService =
+                planningPeriodService;
+
+        this.jsonMapper =
+                jsonMapper;
+
+        this.properties =
+                properties;
     }
 
     /**
      * Interprets every comment of a planning period that has not been interpreted yet.
-     *
-     * <p>Comments that fail are skipped rather than aborting the batch: one unparseable
-     * comment must not stop a manager from getting the other thirty.
      */
     @Transactional
-    public List<CommentInterpretation> interpretPending(UUID planningPeriodId) {
-        PlanningPeriod period = planningPeriodService.loadInTenant(planningPeriodId);
-        List<EmployeeComment> comments =
-                commentRepository.findAllByPlanningPeriodIdOrderByCreatedAtDesc(planningPeriodId);
+    public List<CommentInterpretation> interpretPending(
+            UUID planningPeriodId) {
 
-        List<CommentInterpretation> created = new ArrayList<>();
+        PlanningPeriod period =
+                planningPeriodService
+                        .loadInTenant(planningPeriodId);
+
+        List<EmployeeComment> comments =
+                commentRepository
+                        .findAllByPlanningPeriodIdOrderByCreatedAtDesc(
+                                planningPeriodId);
+
+        List<CommentInterpretation> created =
+                new ArrayList<>();
+
         for (EmployeeComment comment : comments) {
-            if (!interpretationRepository.findAllByCommentId(comment.getId()).isEmpty()) {
+
+            if (!interpretationRepository
+                    .findAllByCommentId(comment.getId())
+                    .isEmpty()) {
+
                 continue;
             }
+
             try {
-                interpret(comment, period).ifPresent(created::add);
+                interpret(
+                        comment,
+                        period)
+                        .ifPresent(created::add);
+
             } catch (AiUnavailableException ex) {
-                // Stop the batch, but keep what already succeeded: retrying later will pick
-                // up exactly the comments that were missed, because interpreted ones are
-                // skipped above.
-                log.warn("Stopping interpretation batch for period {}: {}", planningPeriodId, ex.getMessage());
+
+                /*
+                 * Stop the batch but keep successfully interpreted comments.
+                 * A later retry will continue with the missing ones.
+                 */
+                log.warn(
+                        "Stopping interpretation batch for period {}: {}",
+                        planningPeriodId,
+                        ex.getMessage());
+
                 break;
+
             } catch (RuntimeException ex) {
-                log.warn("Skipping comment {} after an interpretation failure", comment.getId(), ex);
+
+                log.warn(
+                        "Skipping comment {} after an interpretation failure",
+                        comment.getId(),
+                        ex);
             }
         }
+
         return created;
     }
 
-    /** Interprets one comment. Returns empty if the model's answer was not usable. */
+    /**
+     * Interprets one comment.
+     *
+     * @return empty if the model's answer cannot safely be used
+     */
     @Transactional
-    public Optional<CommentInterpretation> interpret(EmployeeComment comment, PlanningPeriod period) {
-        String systemPrompt = buildSystemPrompt(period);
-        String raw = aiClient.completeJson(systemPrompt, PromptSafety.fence(comment.getOriginalText()), JSON_SHAPE);
+    public Optional<CommentInterpretation> interpret(
+            EmployeeComment comment,
+            PlanningPeriod period) {
+
+        String systemPrompt =
+                buildSystemPrompt(period);
+
+        String raw =
+                aiClient.completeJson(
+                        systemPrompt,
+                        PromptSafety.fence(
+                                comment.getOriginalText()),
+                        JSON_SHAPE);
 
         JsonNode node;
+
         try {
-            node = objectMapper.readTree(stripCodeFence(raw));
-        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
-            log.warn("Model returned unparseable JSON for comment {}", comment.getId());
+            node =
+                    jsonMapper.readTree(
+                            stripCodeFence(raw));
+
+        } catch (JacksonException ex) {
+
+            log.warn(
+                    "Model returned unparseable JSON for comment {}",
+                    comment.getId());
+
             return Optional.empty();
         }
 
-        BigDecimal confidence = parseConfidence(node.path("confidence"));
-        String interpretationText = node.path("interpretation").asText("").trim();
+        BigDecimal confidence =
+                parseConfidence(
+                        node.path("confidence"));
+
+        String interpretationText =
+                node.path("interpretation")
+                        .asString("")
+                        .trim();
+
         if (interpretationText.isEmpty()) {
             return Optional.empty();
         }
 
-        CommentInterpretation interpretation = new CommentInterpretation(
-                comment.getOrganizationId(),
-                comment.getId(),
-                interpretationText,
-                confidence,
-                CommentInterpretation.Source.LOCAL_LLM);
+        CommentInterpretation interpretation =
+                new CommentInterpretation(
+                        comment.getOrganizationId(),
+                        comment.getId(),
+                        interpretationText,
+                        confidence,
+                        CommentInterpretation.Source.LOCAL_LLM);
 
-        // Each field is applied only if it parses AND makes sense for this period. A date
-        // outside the planning period is far more likely to be a model error than a genuine
-        // statement about another week, so it is dropped rather than stored.
-        parseDate(node.path("date")).filter(period::covers).ifPresent(interpretation::setInterpretedDate);
-        parseAvailabilityType(node.path("availability")).ifPresent(interpretation::setAvailabilityType);
-        parseTime(node.path("preferredStart")).ifPresent(interpretation::setPreferredStartTime);
-        parseTime(node.path("preferredEnd")).ifPresent(interpretation::setPreferredEndTime);
+        /*
+         * Each model-derived field is applied only when it parses and,
+         * for dates, belongs to the planning period.
+         */
+        parseDate(
+                node.path("date"))
+                .filter(period::covers)
+                .ifPresent(
+                        interpretation::setInterpretedDate);
 
-        boolean claimsHard = node.path("hardConstraint").asBoolean(false);
-        interpretation.setHardConstraint(claimsHard);
+        parseAvailabilityType(
+                node.path("availability"))
+                .ifPresent(
+                        interpretation::setAvailabilityType);
 
-        // Review status: anything claiming to be a hard constraint always goes to a human,
-        // regardless of confidence. Everything below the configured threshold does too.
+        parseTime(
+                node.path("preferredStart"))
+                .ifPresent(
+                        interpretation::setPreferredStartTime);
+
+        parseTime(
+                node.path("preferredEnd"))
+                .ifPresent(
+                        interpretation::setPreferredEndTime);
+
+        boolean claimsHard =
+                node.path("hardConstraint")
+                        .asBoolean(false);
+
+        interpretation.setHardConstraint(
+                claimsHard);
+
         boolean confidentEnough =
-                confidence.doubleValue() >= properties.minimumConfidenceForAutoApply();
-        interpretation.setReviewStatus(CommentInterpretation.ReviewStatus.PENDING);
+                confidence.doubleValue()
+                        >= properties
+                        .minimumConfidenceForAutoApply();
+
+        interpretation.setReviewStatus(
+                CommentInterpretation
+                        .ReviewStatus
+                        .PENDING);
+
         if (confidentEnough && !claimsHard) {
-            // Still PENDING for the audit trail, but flagged as usable as a soft hint. It is
-            // never silently promoted to a rule the solver must obey.
+
             log.debug(
                     "Interpretation for comment {} is confident ({}) and soft; usable without review",
                     comment.getId(),
                     confidence);
         }
 
-        return Optional.of(interpretationRepository.save(interpretation));
+        return Optional.of(
+                interpretationRepository
+                        .save(interpretation));
     }
 
-    private String buildSystemPrompt(PlanningPeriod period) {
+    private String buildSystemPrompt(
+            PlanningPeriod period) {
+
         return """
                You extract scheduling information from short messages written by restaurant \
                staff about when they can work. The messages may be in German or English.
@@ -192,68 +297,134 @@ public class CommentInterpretationService {
 
                %s
                """
-                .formatted(period.getStartDate(), period.getEndDate(), PromptSafety.SYSTEM_GUARD);
+                .formatted(
+                        period.getStartDate(),
+                        period.getEndDate(),
+                        PromptSafety.SYSTEM_GUARD);
     }
 
     /**
-     * Strips markdown code fences some models wrap JSON in despite being told not to.
-     *
-     * <p>Cheap to do and it recovers an otherwise perfectly good answer; the alternative is
-     * discarding a correct interpretation over three backticks.
+     * Removes markdown code fences if a model adds them around JSON.
      */
-    private static String stripCodeFence(String raw) {
-        String trimmed = raw.trim();
+    private static String stripCodeFence(
+            String raw) {
+
+        String trimmed =
+                raw.trim();
+
         if (trimmed.startsWith("```")) {
-            int firstNewline = trimmed.indexOf('\n');
-            int lastFence = trimmed.lastIndexOf("```");
-            if (firstNewline > 0 && lastFence > firstNewline) {
-                return trimmed.substring(firstNewline + 1, lastFence).trim();
+
+            int firstNewline =
+                    trimmed.indexOf('\n');
+
+            int lastFence =
+                    trimmed.lastIndexOf("```");
+
+            if (firstNewline > 0
+                    && lastFence > firstNewline) {
+
+                return trimmed
+                        .substring(
+                                firstNewline + 1,
+                                lastFence)
+                        .trim();
             }
         }
+
         return trimmed;
     }
 
-    private static BigDecimal parseConfidence(JsonNode node) {
+    private static BigDecimal parseConfidence(
+            JsonNode node) {
+
         if (!node.isNumber()) {
-            // No confidence stated means no confidence earned. Defaulting high here would
-            // let a malformed answer bypass review entirely.
-            return BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+
+            /*
+             * Missing confidence means no confidence earned.
+             */
+            return BigDecimal.ZERO
+                    .setScale(
+                            3,
+                            RoundingMode.HALF_UP);
         }
-        double value = Math.max(0.0, Math.min(1.0, node.asDouble()));
-        return BigDecimal.valueOf(value).setScale(3, RoundingMode.HALF_UP);
+
+        double value =
+                Math.max(
+                        0.0,
+                        Math.min(
+                                1.0,
+                                node.asDouble()));
+
+        return BigDecimal
+                .valueOf(value)
+                .setScale(
+                        3,
+                        RoundingMode.HALF_UP);
     }
 
-    private static Optional<LocalDate> parseDate(JsonNode node) {
-        String text = node.asText(null);
-        if (text == null || text.isBlank() || "null".equalsIgnoreCase(text)) {
+    private static Optional<LocalDate> parseDate(
+            JsonNode node) {
+
+        String text =
+                node.asString(null);
+
+        if (text == null
+                || text.isBlank()
+                || "null".equalsIgnoreCase(text)) {
+
             return Optional.empty();
         }
+
         try {
-            return Optional.of(LocalDate.parse(text));
+            return Optional.of(
+                    LocalDate.parse(text));
+
         } catch (DateTimeParseException ex) {
             return Optional.empty();
         }
     }
 
-    private static Optional<LocalTime> parseTime(JsonNode node) {
-        String text = node.asText(null);
-        if (text == null || text.isBlank() || "null".equalsIgnoreCase(text)) {
+    private static Optional<LocalTime> parseTime(
+            JsonNode node) {
+
+        String text =
+                node.asString(null);
+
+        if (text == null
+                || text.isBlank()
+                || "null".equalsIgnoreCase(text)) {
+
             return Optional.empty();
         }
+
         try {
-            return Optional.of(LocalTime.parse(text));
+            return Optional.of(
+                    LocalTime.parse(text));
+
         } catch (DateTimeParseException ex) {
             return Optional.empty();
         }
     }
 
-    private static Optional<AvailabilityType> parseAvailabilityType(JsonNode node) {
-        String text = node.asText(null);
-        if (text == null || text.isBlank()) {
+    private static Optional<AvailabilityType>
+    parseAvailabilityType(
+            JsonNode node) {
+
+        String text =
+                node.asString(null);
+
+        if (text == null
+                || text.isBlank()) {
+
             return Optional.empty();
         }
+
         try {
-            return Optional.of(AvailabilityType.valueOf(text.trim().toUpperCase()));
+            return Optional.of(
+                    AvailabilityType.valueOf(
+                            text.trim()
+                                    .toUpperCase()));
+
         } catch (IllegalArgumentException ex) {
             return Optional.empty();
         }
