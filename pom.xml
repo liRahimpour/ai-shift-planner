@@ -1,15 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Version notes (read before first build):
-  This project was authored in a sandbox with no route to Maven Central, so the versions
-  below are the latest stable releases known at authoring time, not versions that were
-  live-verified against the repository. The FIRST `./mvnw verify` (locally or in CI) is
-  the real verification step. If a coordinate 404s, bump it to the latest patch release of
-  the same minor line - see the comment next to each <*.version> property.
--->
+
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="
+            http://maven.apache.org/POM/4.0.0
+            https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -25,24 +21,43 @@
     <packaging>jar</packaging>
 
     <name>ai-shift-planner</name>
-    <description>AI-assisted shift scheduling platform for gastronomy businesses</description>
+
+    <description>
+        AI-assisted shift scheduling platform for gastronomy businesses
+    </description>
 
     <properties>
-        <java.version>21</java.version>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <!-- https://mvnrepository.com/artifact/ai.timefold.solver/timefold-solver-bom -->
+        <!-- Application Java version -->
+        <java.version>26</java.version>
+
+        <project.build.sourceEncoding>
+            UTF-8
+        </project.build.sourceEncoding>
+
+        <!-- Timefold -->
         <timefold.version>2.5.0</timefold.version>
-        <!-- https://mvnrepository.com/artifact/org.mapstruct/mapstruct -->
+
+        <!-- MapStruct -->
         <mapstruct.version>1.6.3</mapstruct.version>
-        <!-- https://mvnrepository.com/artifact/io.jsonwebtoken/jjwt-api -->
+
+        <!-- JWT -->
         <jjwt.version>0.13.0</jjwt.version>
 
-        <sonar.organization>ai-shift-planner</sonar.organization>
+        <sonar.organization>
+            ai-shift-planner
+        </sonar.organization>
+
     </properties>
 
+    <!-- ================================================================ -->
+    <!-- Dependency Management                                            -->
+    <!-- ================================================================ -->
+
     <dependencyManagement>
+
         <dependencies>
+
             <dependency>
                 <groupId>ai.timefold.solver</groupId>
                 <artifactId>timefold-solver-bom</artifactId>
@@ -50,55 +65,78 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
         </dependencies>
+
     </dependencyManagement>
 
+    <!-- ================================================================ -->
+    <!-- Dependencies                                                     -->
+    <!-- ================================================================ -->
+
     <dependencies>
-        <!-- Web / validation -->
+
+        <!-- ============================================================ -->
+        <!-- Web / Validation                                             -->
+        <!-- ============================================================ -->
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
-        <!-- Persistence -->
+        <!-- ============================================================ -->
+        <!-- Persistence                                                  -->
+        <!-- ============================================================ -->
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
+
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
         </dependency>
+
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
-        <!-- Security -->
+        <!-- ============================================================ -->
+        <!-- Security                                                     -->
+        <!-- ============================================================ -->
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
+
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
             <version>${jjwt.version}</version>
         </dependency>
+
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-impl</artifactId>
             <version>${jjwt.version}</version>
             <scope>runtime</scope>
         </dependency>
+
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-jackson</artifactId>
@@ -106,124 +144,195 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Observability -->
+        <!-- ============================================================ -->
+        <!-- Observability / Health                                       -->
+        <!-- ============================================================ -->
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- OpenAPI -->
+        <!-- ============================================================ -->
+        <!-- OpenAPI                                                      -->
+        <!-- ============================================================ -->
+
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>3.1.0</version>
         </dependency>
 
-        <!-- Deterministic scheduling engine -->
+        <!-- ============================================================ -->
+        <!-- Shift Optimization / Timefold                                -->
+        <!-- ============================================================ -->
+
         <dependency>
             <groupId>ai.timefold.solver</groupId>
             <artifactId>timefold-solver-spring-boot-starter</artifactId>
         </dependency>
 
-        <!--
-          Local AI layer: no extra dependency. LocalAiClient talks to Ollama's native
-          /api/chat over Spring's RestClient (spring-boot-starter-web, already present).
-          See docs/adr/010-ollama-native-api-instead-of-spring-ai.md for the reasoning and
-          for how to swap in a Spring AI implementation behind the same interface.
-        -->
+        <!-- ============================================================ -->
+        <!-- Mapping                                                      -->
+        <!-- ============================================================ -->
 
-        <!-- Mapping -->
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
             <version>${mapstruct.version}</version>
         </dependency>
 
-        <!-- Test -->
+        <!-- ============================================================ -->
+        <!-- Testing                                                      -->
+        <!-- ============================================================ -->
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!--
+            Spring Boot 4 moved TestRestTemplate into dedicated modules.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-restclient</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-resttestclient</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ============================================================ -->
+        <!-- Testcontainers                                               -->
+        <!-- ============================================================ -->
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-testcontainers</artifactId>
             <scope>test</scope>
         </dependency>
+
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>postgresql</artifactId>
+            <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>ai.timefold.solver</groupId>
-            <artifactId>timefold-solver-test</artifactId>
-            <scope>test</scope>
-        </dependency>
+
     </dependencies>
 
+    <!-- ================================================================ -->
+    <!-- Build                                                            -->
+    <!-- ================================================================ -->
+
     <build>
+
         <finalName>ai-shift-planner</finalName>
+
         <plugins>
+
+            <!-- Spring Boot executable JAR -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+
+            <!-- Java compiler + MapStruct annotation processor -->
             <plugin>
+
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+
                 <configuration>
+
                     <annotationProcessorPaths>
+
                         <path>
                             <groupId>org.mapstruct</groupId>
                             <artifactId>mapstruct-processor</artifactId>
                             <version>${mapstruct.version}</version>
                         </path>
+
                     </annotationProcessorPaths>
+
                 </configuration>
+
             </plugin>
+
+            <!-- Code coverage -->
             <plugin>
+
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.8.15</version>
+
                 <executions>
+
                     <execution>
+
                         <id>prepare-agent</id>
+
                         <goals>
                             <goal>prepare-agent</goal>
                         </goals>
+
                     </execution>
+
                     <execution>
+
                         <id>report</id>
+
                         <phase>verify</phase>
+
                         <goals>
                             <goal>report</goal>
                         </goals>
+
                     </execution>
+
                 </executions>
+
             </plugin>
+
+            <!-- Integration tests -->
             <plugin>
+
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
+
                 <executions>
+
                     <execution>
+
                         <goals>
                             <goal>integration-test</goal>
                             <goal>verify</goal>
                         </goals>
+
                     </execution>
+
                 </executions>
+
             </plugin>
+
         </plugins>
+
     </build>
+
 </project>

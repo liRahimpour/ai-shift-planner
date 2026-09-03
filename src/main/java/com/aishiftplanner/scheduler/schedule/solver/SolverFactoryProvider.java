@@ -1,6 +1,7 @@
 package com.aishiftplanner.scheduler.schedule.solver;
 
 import ai.timefold.solver.core.api.solver.SolverFactory;
+import ai.timefold.solver.core.config.solver.EnvironmentMode;
 import ai.timefold.solver.core.config.solver.SolverConfig;
 import ai.timefold.solver.core.config.solver.termination.TerminationConfig;
 import com.aishiftplanner.scheduler.shared.config.SchedulingProperties;
@@ -9,39 +10,58 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Builds the Timefold solver programmatically rather than through XML or starter
- * auto-configuration.
+ * Creates and configures the Timefold solver used for automatic shift planning.
  *
- * <p>Two reasons. First, the time budget has to come from {@link SchedulingProperties} —
- * a small café's week and a twelve-location group's week deserve very different budgets, and
- * that has to be settable per deployment through an environment variable. Second, an explicit
- * configuration in Java is greppable: someone debugging why a plan looks odd can read the
- * termination and score rules here instead of hunting for an XML file whose presence they'd
- * have to know about.
+ * <p>The solver is configured programmatically instead of through XML so that important
+ * runtime settings, such as the maximum solving time, can come directly from application
+ * configuration.
  */
 @Configuration
 public class SolverFactoryProvider {
 
+    /**
+     * Creates the solver factory for shift schedules.
+     *
+     * @param properties application-specific scheduling configuration
+     * @return configured Timefold solver factory
+     */
     @Bean
-    public SolverFactory<ShiftSchedule> shiftScheduleSolverFactory(SchedulingProperties properties) {
-        SolverConfig config = new SolverConfig()
-                .withSolutionClass(ShiftSchedule.class)
-                .withEntityClasses(ShiftSlot.class)
-                .withConstraintProviderClass(ShiftScheduleConstraintProvider.class)
-                .withTerminationConfig(new TerminationConfig()
-                        .withSpentLimit(Duration.ofSeconds(properties.solverSecondsSpentLimit()))
-                        // Stop early if nothing has improved for a third of the budget: past
-                        // that point the search is almost always polishing noise, and giving
-                        // the manager an answer sooner is worth more than the last 0.1%.
-                        .withUnimprovedSpentLimit(
-                                Duration.ofSeconds(
-                                        Math.max(5, properties.solverSecondsSpentLimit() / 3))));
+    public SolverFactory<ShiftSchedule> shiftScheduleSolverFactory(
+            SchedulingProperties properties) {
 
-        // Deterministic runs: the same inputs must produce the same schedule, otherwise two
-        // managers looking at "the fair plan" for the same week would see different rosters
-        // and neither could explain why.
+        long solverSeconds =
+                properties.solverSecondsSpentLimit();
+
+        Duration spentLimit =
+                Duration.ofSeconds(solverSeconds);
+
+        Duration unimprovedSpentLimit =
+                Duration.ofSeconds(
+                        Math.max(
+                                5,
+                                solverSeconds / 3));
+
+        SolverConfig config =
+                new SolverConfig()
+                        .withSolutionClass(ShiftSchedule.class)
+                        .withEntityClasses(ShiftSlot.class)
+                        .withConstraintProviderClass(
+                                ShiftScheduleConstraintProvider.class)
+                        .withTerminationConfig(
+                                new TerminationConfig()
+                                        .withSpentLimit(spentLimit)
+                                        .withUnimprovedSpentLimit(
+                                                unimprovedSpentLimit));
+
+        /*
+         * Use a fixed random seed so that the solver's random decisions are repeatable
+         * as far as possible.
+         *
+         * Timefold 2 removed EnvironmentMode.REPRODUCIBLE.
+         * NO_ASSERT is its direct replacement and remains a reproducible environment mode.
+         */
         config.setRandomSeed(1L);
-        config.setEnvironmentMode(ai.timefold.solver.core.config.solver.EnvironmentMode.REPRODUCIBLE);
+        config.setEnvironmentMode(EnvironmentMode.NO_ASSERT);
 
         return SolverFactory.create(config);
     }

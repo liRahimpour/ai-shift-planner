@@ -12,7 +12,7 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 mvn -B -q -DskipTests package
 
 # ---- Runtime stage --------------------------------------------------------
-FROM eclipse-temurin:25-jre-alpine AS runtime
+FROM eclipse-temurin:26-jre-alpine AS runtime
 
 # No root user, no build tools, no Maven cache, no secrets in the final image.
 RUN addgroup -S app && adduser -S app -G app

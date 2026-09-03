@@ -1,8 +1,8 @@
 package com.aishiftplanner.scheduler.schedule.solver;
 
+import ai.timefold.solver.core.api.domain.common.PlanningId;
 import ai.timefold.solver.core.api.domain.entity.PlanningEntity;
 import ai.timefold.solver.core.api.domain.entity.PlanningPin;
-import ai.timefold.solver.core.api.domain.lookup.PlanningId;
 import ai.timefold.solver.core.api.domain.variable.PlanningVariable;
 import com.aishiftplanner.scheduler.shared.domain.TimeWindow;
 import java.time.LocalDate;
@@ -11,15 +11,13 @@ import java.util.UUID;
 /**
  * The planning entity: one seat in one shift, whose occupant the solver decides.
  *
- * <p>Modelling a <em>seat</em> rather than a shift is what lets "4 people needed on Saturday
- * evening" be expressed as four independent decisions, each of which can be pinned, left
- * empty, or reassigned without disturbing the others.
+ * <p>Modelling a seat rather than an entire shift allows a requirement such as
+ * "4 employees needed Saturday evening" to be represented as four independent planning
+ * decisions.
  *
- * <p>{@code allowsUnassigned = true} on the planning variable is deliberate. The alternative
- * — forcing every seat to be filled — makes an under-resourced week simply unsolvable, and
- * the solver's only possible answer becomes "no". A manager needs the opposite: the best
- * possible plan, plus an explicit list of the seats that could not be filled. Unfilled seats
- * are then penalized hard in the constraints, so the solver still fills everything it can.
+ * <p>{@code allowsUnassigned = true} is deliberate. If the business does not have enough
+ * employees, Timefold can still return the best possible schedule and leave individual
+ * seats explicitly unassigned instead of declaring the entire problem unsolvable.
  */
 @PlanningEntity
 public class ShiftSlot {
@@ -27,32 +25,46 @@ public class ShiftSlot {
     @PlanningId
     private UUID id;
 
-    /** The shift this seat belongs to. A problem fact — never changed by the solver. */
+    /**
+     * The shift this seat belongs to.
+     * This is a problem fact and is never changed by the solver.
+     */
     private PlanningShift shift;
 
     private int slotIndex;
 
     /**
-     * Pinned seats are a manager's explicit decision and are excluded from the search, so a
-     * hand-made fix survives a re-optimization untouched.
+     * Pinned seats represent an explicit manager decision and must not be changed by the
+     * solver during re-optimization.
      */
     @PlanningPin
     private boolean pinned;
 
-    @PlanningVariable(valueRangeProviderRefs = "employeeRange", allowsUnassigned = true)
+    /**
+     * The actual planning variable.
+     *
+     * <p>Timefold chooses an employee from the employeeRange declared on ShiftSchedule.
+     */
+    @PlanningVariable(
+            valueRangeProviderRefs = "employeeRange",
+            allowsUnassigned = true)
     private PlanningEmployee employee;
 
-    /** Required by Timefold for cloning. */
+    /**
+     * Required by Timefold for cloning.
+     */
     public ShiftSlot() {
     }
 
-    public ShiftSlot(UUID id, PlanningShift shift, int slotIndex) {
+    public ShiftSlot(
+            UUID id,
+            PlanningShift shift,
+            int slotIndex) {
+
         this.id = id;
         this.shift = shift;
         this.slotIndex = slotIndex;
     }
-
-    // --- Convenience accessors used by the constraint streams -----------------
 
     public TimeWindow window() {
         return shift.window();
@@ -70,7 +82,9 @@ public class ShiftSlot {
         return employee != null;
     }
 
-    /** True if this seat and {@code other} cannot both be worked by the same person. */
+    /**
+     * True if this seat and another seat overlap in time.
+     */
     public boolean overlapsInTime(ShiftSlot other) {
         return window().overlaps(other.window());
     }
@@ -117,8 +131,18 @@ public class ShiftSlot {
 
     @Override
     public String toString() {
-        return "ShiftSlot{" + shift.date() + " " + shift.startTime() + "-" + shift.endTime()
-                + " #" + slotIndex + " → "
-                + (employee == null ? "unassigned" : employee.fullName()) + "}";
+        return "ShiftSlot{"
+                + shift.date()
+                + " "
+                + shift.startTime()
+                + "-"
+                + shift.endTime()
+                + " #"
+                + slotIndex
+                + " → "
+                + (employee == null
+                ? "unassigned"
+                : employee.fullName())
+                + "}";
     }
 }

@@ -5,7 +5,7 @@ import ai.timefold.solver.core.api.domain.solution.PlanningScore;
 import ai.timefold.solver.core.api.domain.solution.PlanningSolution;
 import ai.timefold.solver.core.api.domain.solution.ProblemFactCollectionProperty;
 import ai.timefold.solver.core.api.domain.valuerange.ValueRangeProvider;
-import ai.timefold.solver.core.api.score.buildin.hardsoftlong.HardSoftLongScore;
+import ai.timefold.solver.core.api.score.HardSoftScore;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -13,13 +13,13 @@ import java.util.List;
  * The planning solution: all seats to fill, all people who could fill them, and the weights
  * that decide what "better" means.
  *
- * <p>Score type is {@link HardSoftLongScore}: hard for rules that must never be broken
+ * <p>Score type is {@link HardSoftScore}: hard for rules that must never be broken
  * (availability, double-booking, skills, rest time, location clearance, minimum staffing),
- * soft for everything that is a trade-off (cost, fairness, wishes, contract hours). A
- * negative hard score means the schedule is not publishable, full stop — no amount of soft
- * score can compensate, which is exactly the property that keeps "cheapest" from quietly
- * meaning "illegal". {@code long} rather than {@code int} because staff cost in cents across
- * a large multi-location week overflows an int surprisingly easily.
+ * soft for everything that is a trade-off (cost, fairness, wishes, contract hours).
+ *
+ * <p>A negative hard score means the schedule is not publishable. No amount of soft score
+ * can compensate for a hard violation. Timefold 2's {@link HardSoftScore} uses long values,
+ * which is important here because staffing cost in cents can become large.
  */
 @PlanningSolution
 public class ShiftSchedule {
@@ -35,22 +35,24 @@ public class ShiftSchedule {
      * The constraint weights that distinguish FAIR from COST_OPTIMIZED from BALANCED.
      *
      * <p>A problem fact rather than a hardcoded constant, so the same constraint code serves
-     * all three strategies. Three parallel copies of the constraint provider — one per
-     * strategy — would be three places for the hard constraints to drift apart, which is the
-     * one thing that must never happen.
+     * all three strategies.
      */
     @ProblemFactCollectionProperty
     private List<ConstraintWeights> weightsHolder;
 
-    /** Boundaries of the planning period, needed for per-week hour accounting. */
+    /**
+     * Boundaries of the planning period, needed for per-week hour accounting.
+     */
     private LocalDate periodStart;
 
     private LocalDate periodEnd;
 
     @PlanningScore
-    private HardSoftLongScore score;
+    private HardSoftScore score;
 
-    /** Required by Timefold. */
+    /**
+     * Required by Timefold.
+     */
     public ShiftSchedule() {
     }
 
@@ -60,6 +62,7 @@ public class ShiftSchedule {
             ConstraintWeights weights,
             LocalDate periodStart,
             LocalDate periodEnd) {
+
         this.employees = employees;
         this.slots = slots;
         this.weightsHolder = List.of(weights);
@@ -73,12 +76,20 @@ public class ShiftSchedule {
                 : weightsHolder.get(0);
     }
 
-    /** Number of weeks the period spans, at least 1 — used to scale weekly hour targets. */
+    /**
+     * Number of weeks the period spans, at least 1.
+     */
     public double weeksInPeriod() {
         if (periodStart == null || periodEnd == null) {
             return 1.0;
         }
-        long days = java.time.temporal.ChronoUnit.DAYS.between(periodStart, periodEnd) + 1;
+
+        long days =
+                java.time.temporal.ChronoUnit.DAYS.between(
+                        periodStart,
+                        periodEnd)
+                        + 1;
+
         return Math.max(1.0, days / 7.0);
     }
 
@@ -122,11 +133,11 @@ public class ShiftSchedule {
         this.periodEnd = periodEnd;
     }
 
-    public HardSoftLongScore getScore() {
+    public HardSoftScore getScore() {
         return score;
     }
 
-    public void setScore(HardSoftLongScore score) {
+    public void setScore(HardSoftScore score) {
         this.score = score;
     }
 }

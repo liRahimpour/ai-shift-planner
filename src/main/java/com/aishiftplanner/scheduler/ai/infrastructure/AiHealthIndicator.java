@@ -1,8 +1,8 @@
 package com.aishiftplanner.scheduler.ai.infrastructure;
 
 import com.aishiftplanner.scheduler.ai.domain.LocalAiClient;
-import org.springframework.boot.actuate.health.Health;
-import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.boot.health.contributor.Health;
+import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.stereotype.Component;
 
 /**
@@ -33,12 +33,16 @@ public class AiHealthIndicator implements HealthIndicator {
                     .withDetail("note", "AI features are switched off by configuration.")
                     .build();
         }
+
         boolean reachable = localAiClient.isAvailable();
+
         return (reachable ? Health.up() : Health.status("DEGRADED"))
-                .withDetail("state", reachable ? "AVAILABLE" : "AI_TEMPORARILY_UNAVAILABLE")
+                .withDetail(
+                        "state",
+                        reachable
+                                ? "AVAILABLE"
+                                : "AI_TEMPORARILY_UNAVAILABLE")
                 .withDetail("model", properties.model())
-                // The base URL is configuration, not a secret; no credentials are ever
-                // included in health details.
                 .withDetail("baseUrl", properties.baseUrl())
                 .build();
     }
